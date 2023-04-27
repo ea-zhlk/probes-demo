@@ -1,0 +1,67 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: probes-app
+  namespace: probes-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      role: probes-app
+  template:
+    metadata:
+      labels:
+        role: probes-app
+        user: emre
+    spec:
+      volumes:
+        - name: shared-tmp
+          emptyDir: {}
+
+      initContainers:
+        - name: healthy-file-generator
+          image: busybox:1.35
+          volumeMounts:
+            - name: shared-tmp
+              mountPath: /tmp
+          args:
+          - /bin/sh
+          - -c
+          - touch /tmp/healthy 
+      containers:
+        - name: probes-app
+          image: emreatsan223/probes-demo:v1
+          imagePullPolicy: Always
+          volumeMounts:
+            - name: shared-tmp
+              mountPath: /tmp
+          resources:
+            limits:
+              memory: 1Gi
+          ports:
+            - name: healthcheck
+              containerPort: 8080
+          env:
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          readinessProbe:
+            #Readiness probe is used to check if this app is ready to serve traffic.
+            httpGet:
+              port: healthcheck
+              path: /actuator/health/readiness
+            initialDelaySeconds: 10
+          livenessProbe:
+            # Liveness probe is used to check if this app is responding to requests
+            # (after it is marked as "ready").
+            #httpGet:
+            #  port: healthcheck
+            #  path: /actuator/health/liveness
+            exec:
+              command:
+                - cat
+                - /tmp/healthy
+            initialDelaySeconds: 60
+            periodSeconds: 3
